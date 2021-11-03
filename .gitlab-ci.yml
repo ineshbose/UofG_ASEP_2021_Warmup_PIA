@@ -1,0 +1,44 @@
+default:
+  image: ubuntu:latest
+  tags:
+    - docker
+
+.commons: &commons
+  only:
+    - merge_requests
+
+begin-test:
+  <<: *commons
+  stage: build
+  script:
+    - echo "Checking MR for $GITLAB_USER_LOGIN..."
+
+check-readme:
+  <<: *commons
+  stage: test
+  variables:
+    README: './$GITLAB_USER_LOGIN/README.md'
+    IGNORE: './$GITLAB_USER_LOGIN/.gitignore'
+  script:
+    - echo "Checking README & gitignore..."
+    - (test -e $README && echo "README exists") || (echo "README not created" && exit 1)
+    - (awk '{c++};END{print (c > 0)}' < $README | grep -q '1' && echo "README has content") || (echo "README not filled" && exit 1)
+    - >
+      for i in $(seq 1 4); do
+        (grep -q "## Kata $i" $README) || (echo "README does not have Kata $i title" && exit 1)
+      done || exit 1
+    - (test -e $IGNORE && echo "gitignore exists") || (echo "gitignore not created" && exit 1)
+
+check-files:
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git
+    - git --version
+  <<: *commons
+  stage: test
+  script:
+    - echo "Checking files..."
+    - (git diff `git rev-list HEAD | tail -n 1` HEAD --shortstat | grep -q 'files' && echo "Branch has changes") || (echo "No changes in branch" && exit 1)
+    - >
+      for i in $(seq 1 4); do
+        (test -e ./$GITLAB_USER_LOGIN/kata_$i.*) || (echo "Kata $i not committed" && exit 1)
+      done || exit 1
